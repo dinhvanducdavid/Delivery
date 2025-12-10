@@ -14,15 +14,15 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 import openpyxl
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.firefox.service import Service as FirefoxService
-from webdriver_manager.chrome import ChromeDriverManager
+
 from webdriver_manager.firefox import GeckoDriverManager
 
 
@@ -242,7 +242,8 @@ class JiraDownloader:
         options.set_preference("browser.download.folderList", 2)
         options.set_preference("browser.download.dir", str(self.download_path))
         options.set_preference("browser.download.useDownloadDir", True)
-        options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/zip, application/octet-stream")
+        options.set_preference('browser.download.manager.showWhenStarting', False)
+        options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/zip, application/pdf, application/octet-stream")
 
 
         try:
@@ -391,9 +392,9 @@ class JiraDownloader:
         if not JiraConfig.DOWNLOAD_GERRIT_ZIP:
             return
 
-        ticket_date = self.find_ticket_date()
-        self.logger.info(f"Ticket date: {ticket_date}")
-        print(f"Ticket date: {ticket_date}")
+        # ticket_date = self.find_ticket_date()
+        # self.logger.info(f"Ticket date: {ticket_date}")
+        # print(f"Ticket date: {ticket_date}")
 
         num = 0
         for gerrit_id in gerrit_list:
@@ -408,44 +409,36 @@ class JiraDownloader:
 
                 self.logger.info(f"Revision ID: {revision_id}")
 
-                # Get commit date
-                commit_date = self.gerrit_manager.get_commit_date(
-                    gerrit_id, gerrit_address
+                # # Get commit date
+                # commit_date = self.gerrit_manager.get_commit_date(
+                #     gerrit_id, gerrit_address
+                # )
+                # print(f"Commit date: {commit_date}")
+                # self.logger.info(f"Commit date: {commit_date}")
+
+                # # Only download if commit is before or on ticket date
+                # if commit_date <= ticket_date:
+                # Build download URL based on Gerrit server
+                if gerrit_address == '10.24.71.180':
+                    download_url = (f"https://secure.jp.sharp/android_review"
+                                    f"/gerrit/changes/{gerrit_id}/revisions"
+                                    f"/{revision_id}/patch?zip")
+                else:  # 10.24.71.91
+                    download_url = (f"http://10.24.71.91/gerrit/changes/{gerrit_id}"
+                                    f"/revisions/{revision_id}/patch?zip")
+
+                # Open download in new window
+                js = f"window.open('{download_url}')"
+                print(f"Downloading: {download_url}")
+                self.browser.execute_script(js)
+
+                num += 1
+                time.sleep(2)
+
+                # Rename the downloaded file
+                FileManager.rename_downloaded_file(
+                    source_dir, str(self.download_path), jira_id, num
                 )
-                print(f"Commit date: {commit_date}")
-                self.logger.info(f"Commit date: {commit_date}")
-
-                # Only download if commit is before or on ticket date
-                if commit_date <= ticket_date:
-                    # Build download URL based on Gerrit server
-                    if gerrit_address == '10.230.1.88':
-                        download_url = (f"http://10.230.1.88/changes/{gerrit_id}"
-                                        f"/revisions/{revision_id}/patch?zip")
-                    elif gerrit_address == '10.24.71.180':
-                        download_url = (f"https://secure.jp.sharp/android_review"
-                                        f"/gerrit/changes/{gerrit_id}/revisions"
-                                        f"/{revision_id}/patch?zip")
-                    else:  # 10.24.71.91
-                        project = self.gerrit_manager.query_gerrit(
-                            gerrit_id, gerrit_address, "project"
-                        )
-                        project_encoded = project.replace("/", "%2F")
-                        download_url = (f"http://10.24.71.91/gerrit/changes"
-                                        f"/{project_encoded}~{gerrit_id}"
-                                        f"/revisions/{revision_id}/patch?zip")
-
-                    # Open download in new window
-                    js = f"window.open('{download_url}')"
-                    print(f"Downloading: {download_url}")
-                    self.browser.execute_script(js)
-
-                    num += 1
-                    time.sleep(2)
-
-                    # Rename the downloaded file
-                    FileManager.rename_downloaded_file(
-                        source_dir, str(self.download_path), jira_id, num
-                    )
 
             except Exception as e:
                 self.logger.error(f"Error downloading Gerrit {gerrit_id}: {e}")
@@ -584,9 +577,9 @@ def main():
         print(f'Error: Excel file not found at {excel_file_path}')
         return
 
-    gerrit_username = input('Enter Gerrit username (default: lx19060027): ').strip()
+    gerrit_username = input('Enter Gerrit username (default: lx24060097): ').strip()
     if not gerrit_username:
-        gerrit_username = "lx19060027"
+        gerrit_username = "lx24060097"
 
     # It's recommended to use a more secure method like environment variables or a config file for passwords
     gerrit_password = input('Enter Gerrit password: ').strip()
@@ -594,13 +587,13 @@ def main():
         print("Gerrit password is required for login.")
         return
 
-    name_sharp = input('Enter Sharp name (default: lx19060027): ').strip()
+    name_sharp = input('Enter Sharp name (default: lx24060097): ').strip()
     if not name_sharp:
-        name_sharp = "lx19060027"
+        name_sharp = "lx24060097"
 
-    name_fih = input('Enter FIH name (default: lx19060027): ').strip()
+    name_fih = input('Enter FIH name (default: lx24060097): ').strip()
     if not name_fih:
-        name_fih = "lx19060027"
+        name_fih = "lx24060097"
 
     # Build paths - create output folder at project root (same level as src)
     project_root = script_dir.parent  # Go up one level from src to project root
