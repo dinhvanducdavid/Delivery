@@ -127,32 +127,92 @@ class FileManager:
 
     @staticmethod
     def rename_downloaded_file(source_dir: str, download_dir: str,
-                               jira_id: str, num: int) -> None:
-        """Rename downloaded zip file with standardized naming"""
-        formatted_num = str(num).zfill(2)
-        new_name = f"{jira_id.strip()}-{formatted_num}.zip"
-
+                               jira_id: str, num: int, log_callback) -> None:
+        """Waits for a new zip file to appear and renames it."""
         download_path = Path(download_dir)
-        for file_path in download_path.glob("*.zip"):
-            if file_path.is_file():
-                target_path = Path(source_dir) / new_name
-                if target_path.exists():
-                    file_path.unlink()
-                    print('Deleted existing file')
-                else:
-                    shutil.move(str(file_path), str(target_path))
-                    print(f'File moved to {target_path}')
-        time.sleep(2)
+        new_name = f"{jira_id.strip()}-{str(num).zfill(2)}.zip"
+        target_path = Path(source_dir) / new_name
+
+        # Wait for the download to start by looking for a .part file
+        time.sleep(1) # Give browser a moment to start download
+
+        # Wait for the .zip file to appear
+        downloaded_file = None
+        for _ in range(30):  # Wait up to 30 seconds
+            # Find the most recently modified zip file that isn't a temp file
+            zip_files = [f for f in download_path.glob("*.zip") if not f.name.endswith('.part')]
+            if zip_files:
+                latest_file = max(zip_files, key=lambda f: f.stat().st_mtime)
+                # A simple check to see if it's a new file
+                if time.time() - latest_file.stat().st_mtime < 10:
+                    downloaded_file = latest_file
+                    break
+            time.sleep(1)
+
+        if downloaded_file:
+            if target_path.exists():
+                log_callback(f"Target file {new_name} already exists. Deleting downloaded file.")
+                downloaded_file.unlink()
+            else:
+                shutil.move(str(downloaded_file), str(target_path))
+                log_callback(f'Moved and renamed to {target_path.name}')
+        else:
+            log_callback(f"Error: No new zip file found for {jira_id}-{num} in {download_dir}")
+
+        time.sleep(1) # Brief pause before next action
 
     @staticmethod
-    def move_doc_to_investigation(download_dir: str, investigation_dir: str, jira_id: str) -> None:
-        """Move downloaded .doc file to Investigation folder"""
+    def convert_and_move_doc_to_pdf(download_dir: str, investigation_dir: str, jira_id: str, log_callback) -> None:
+        """Convert .doc to .pdf and move to Investigation folder."""
         download_path = Path(download_dir)
-        target_path = Path(investigation_dir) / f"{jira_id}.doc"
+        doc_file_path = None
         for file_path in download_path.glob(f"{jira_id}.doc"):
             if file_path.is_file():
-                shutil.move(str(file_path), str(target_path))
-                print(f"Moved {file_path} to {target_path}")
+                doc_file_path = file_path
+                break
+
+        if not doc_file_path:
+            log_callback(f"Warning: {jira_id}.doc not found in {download_dir}")
+            return
+
+        investigation_path = Path(investigation_dir)
+        pdf_target_path = investigation_path / f"{jira_id}.pdf"
+
+        # Check if libreoffice is available
+        if shutil.which("libreoffice"):
+            log_callback(f"Converting {doc_file_path.name} to PDF...")
+            try:
+                subprocess.run(
+                    [
+                        "libreoffice",
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        str(doc_file_path),
+                        "--outdir",
+                        str(download_path),
+                    ],
+                    check=True,
+                    timeout=60,
+                )
+
+                converted_pdf_path = download_path / f"{jira_id}.pdf"
+
+                if converted_pdf_path.exists():
+                    shutil.move(str(converted_pdf_path), str(pdf_target_path))
+                    log_callback(f"Moved {converted_pdf_path.name} to {pdf_target_path}")
+                    doc_file_path.unlink() # remove original .doc file
+                else:
+                    log_callback(f"Error: PDF conversion failed for {doc_file_path.name}. Moving the .doc file instead.")
+                    shutil.move(str(doc_file_path), investigation_path / doc_file_path.name)
+
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                log_callback(f"Error during PDF conversion: {e}. Moving the .doc file instead.")
+                shutil.move(str(doc_file_path), investigation_path / doc_file_path.name)
+        else:
+            log_callback("Warning: 'libreoffice' is not installed. Moving the .doc file without conversion.")
+            shutil.move(str(doc_file_path), investigation_path / doc_file_path.name)
+
         time.sleep(2)
 
 
@@ -437,7 +497,7 @@ class JiraDownloader:
 
                 # Rename the downloaded file
                 FileManager.rename_downloaded_file(
-                    source_dir, str(self.download_path), jira_id, num
+                    source_dir, str(self.download_path), jira_id, num, self.logger.info
                 )
 
             except Exception as e:
@@ -469,8 +529,8 @@ class JiraDownloader:
             self.browser.execute_script(js)
             time.sleep(2)
 
-            # Move downloaded .doc file to Investigation folder
-            FileManager.move_doc_to_investigation(str(self.download_path), str(doc_dir), jira_id)
+            # Convert and move downloaded .doc file to Investigation folder
+            FileManager.convert_and_move_doc_to_pdf(str(self.download_path), str(doc_dir), jira_id, self.logger.info)
 
             # Find and download Gerrit patches
             gerrit_list_p, gerrit_list_q, gerrit_list_ep2 = self.find_gerrit_links()
