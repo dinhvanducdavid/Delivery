@@ -1,6 +1,6 @@
 # JIRA Issue Downloader - Python 3 Version
 
-A modernized Python 3 application for downloading JIRA issues and associated Gerrit patches using Firefox WebDriver.
+A modernized Python 3 application for downloading JIRA issues and associated Gerrit patches using Firefox WebDriver. Available in both **GUI** and **Command-Line** modes.
 
 ## What Changed from the Original Version
 
@@ -75,11 +75,25 @@ sharp_name = your_sharp_name
 fih_name = your_fih_name
 ```
 
+### 7. **GUI Application** 🎉
+- ✅ **User-friendly graphical interface** for easy configuration and execution
+- ✅ **Edit and save `config.ini`** directly from the GUI
+- ✅ **File browser** for selecting Excel files
+- ✅ **Password visibility toggle** for secure password entry
+- ✅ **Real-time output** display showing download progress
+- ✅ **Requirements status checker** with one-click package installation (development mode)
+- ✅ **Build executable** feature to create standalone applications
+- ✅ **Automatic DOC to PDF conversion** using LibreOffice
+- ✅ **Completion dialog** with option to open output folder
+- ✅ Cross-platform support (Linux, Windows, macOS)
+
 ## Setup and Usage
 
 ### 1. Prerequisites
 - Python 3.7 or higher
 - Firefox browser installed
+- LibreOffice (optional, for DOC to PDF conversion)
+- `tkinter` (Linux users: `sudo apt-get install python3-tk`)
 
 ### 2. Install Dependencies
 
@@ -89,7 +103,7 @@ pip install -r requirements.txt
 
 Or manually:
 ```bash
-pip install selenium openpyxl beautifulsoup4 webdriver-manager configparser
+pip install selenium openpyxl beautifulsoup4 webdriver-manager pyinstaller
 ```
 
 ### 3. Configure `config.ini`
@@ -104,11 +118,41 @@ gerrit_username = your_gerrit_username
 gerrit_password = your_gerrit_password
 ```
 
-### 4. Run the script
+### 4. Run the Application
+
+#### Option A: GUI Mode (Recommended) 🎨
+
+Launch the graphical interface:
+
+```bash
+python src/gui.py
+```
+
+**GUI Features:**
+- **Configuration Editor**: Edit all settings directly in the GUI
+- **File Browser**: Browse and select your Excel file
+- **Password Toggle**: Show/hide password for easy verification
+- **Requirements Status**: See which packages are installed (development mode only)
+- **One-Click Install**: Install missing packages directly from the GUI
+- **Real-Time Output**: Watch the download progress in the output window
+- **Build Executable**: Create standalone applications for distribution
+
+**Using the GUI:**
+1. Fill in your configuration (project name, Excel file, credentials)
+2. Click "Save Config" to persist your settings
+3. Click "Run Downloader" to start the download process
+4. Monitor progress in the output window
+5. When complete, choose to open the output folder
+
+#### Option B: Command-Line Mode 💻
+
+Run the script from the terminal:
 
 ```bash
 python src/main.py
 ```
+
+This mode reads from `config.ini` and runs in the terminal with text output.
 
 ### GeckoDriver Setup
 
@@ -130,6 +174,94 @@ The script automatically uses your existing Firefox profile to reuse your JIRA l
 **Troubleshooting Profile Issues:**
 - If login doesn't work, make sure you're logged into JIRA in your default Firefox profile first
 - Close all Firefox windows before running the script
+
+## Building Standalone Executables 📦
+
+You can package the GUI application into a standalone executable that doesn't require Python to be installed on the target system.
+
+### Using the GUI (Easiest Method)
+
+1. Launch the GUI: `python src/gui.py`
+2. Ensure all requirements show as "Installed" (including `pyinstaller`)
+3. Click the **"Build Executable"** button
+4. Wait for the build process to complete (check the output window)
+5. Find your executable in the `dist/` folder
+
+### Using the Command Line
+
+**Important:** Build on the same platform as your target:
+- Build on **Linux** for Linux executables
+- Build on **Windows** for Windows executables (.exe)
+
+```bash
+cd /path/to/Delivery
+pyinstaller --onefile --windowed --name "JiraDownloader" --add-data "config.ini:." --add-data "requirements.txt:." --add-data "src/main.py:src" src/gui.py
+```
+
+**Command Breakdown:**
+- `--onefile`: Creates a single executable file
+- `--windowed`: No console window (GUI only)
+- `--name "JiraDownloader"`: Name of the executable
+- `--add-data`: Bundles necessary data files
+- `src/gui.py`: Entry point of the application
+
+### Distributing the Executable
+
+After building, you'll find the executable in the `dist/` folder:
+- **Linux**: `dist/JiraDownloader`
+- **Windows**: `dist/JiraDownloader.exe`
+
+**To distribute:**
+1. Copy the executable to your desired location
+2. Place `config.ini` in the same directory as the executable (it will be created on first save if missing)
+3. Ensure Firefox is installed on the target system
+4. Run the executable
+
+**Note:** The standalone executable:
+- Does NOT require Python to be installed
+- Does NOT show the "Requirements Status" section (packages are bundled)
+- DOES require Firefox to be installed (for web automation)
+- Creates `config.ini` automatically in its directory if not present
+
+## Features in Detail
+
+### DOC to PDF Conversion
+
+The application automatically converts downloaded `.doc` files to `.pdf` format before moving them to the Investigation folder.
+
+**Requirements:**
+- LibreOffice must be installed and accessible from the command line
+- On Linux: `sudo apt-get install libreoffice`
+- On Windows: Install LibreOffice from [libreoffice.org](https://www.libreoffice.org/)
+
+**Behavior:**
+- If LibreOffice is available: Converts `.doc` → `.pdf` and moves PDF to Investigation folder
+- If conversion fails: Falls back to moving the original `.doc` file
+- Progress is logged in real-time to the GUI output window
+
+### Smart File Handling
+
+**Improved Zip Download Logic:**
+- Waits for each download to complete before processing
+- Identifies the newest file to avoid conflicts
+- Handles multiple simultaneous downloads correctly
+- Renames files with standardized naming: `JIRA-ID-01.zip`, `JIRA-ID-02.zip`, etc.
+
+**Directory Structure:**
+```
+output/
+  └── ProjectName/
+      ├── logs/
+      │   └── ProjectName.log
+      └── FolderName/
+          ├── Investigation/
+          │   └── JIRA-ID.pdf
+          ├── Source/
+          │   ├── JIRA-ID-01.zip
+          │   ├── JIRA-ID-02.zip
+          │   └── JIRA-ID-03.zip
+          └── TestResult/
+```
 
 ## Excel File Format
 
@@ -159,14 +291,101 @@ A template Excel file is provided in the `input/` folder. To use it:
 If you don't want to use the template, create an Excel file (`.xlsx`) with:
 - First row as headers: `JIRA ID` and `Folder Name`
 - Each subsequent row containing a JIRA issue ID and optional folder name
-- Save the file in the `input/` folder
+- Save the file in the `input/` folder or anywhere and use the file browser in the GUI
 
-## Usage
+## Troubleshooting
 
-Run the script:
-```bash
-python src/main.py
+### Common Issues
+
+**"Could not find Firefox profile"**
+- Ensure Firefox is installed
+- Run Firefox at least once to create a profile
+- The script checks standard, Snap, and Flatpak installation paths
+
+**"Requirements not installed" in bundled app**
+- This is normal and can be ignored in standalone executables
+- All dependencies are bundled with the executable
+- The "Requirements Status" section is hidden in the bundled app
+
+**"Verify it's you" prompt in Chrome**
+- This issue has been resolved by switching to Firefox
+- Firefox profile reuse prevents repeated authentication prompts
+
+**Downloads not being renamed/moved**
+- Ensure you have write permissions in the output directory
+- Check the output log for specific error messages
+- Verify that Firefox's download settings haven't been manually changed
+
+**PDF conversion not working**
+- Install LibreOffice: `sudo apt-get install libreoffice` (Linux) or download from libreoffice.org
+- Ensure the `libreoffice` command is in your system's PATH
+- If conversion fails, the original `.doc` file will be moved instead
+
+**GUI doesn't open (Linux)**
+- Install tkinter: `sudo apt-get install python3-tk`
+- Restart your terminal after installation
+
+## Project Structure
+
 ```
+Delivery/
+├── README.md                 # This file
+├── requirements.txt          # Python dependencies
+├── config.ini               # Configuration file
+├── input/                   # Input Excel files
+│   ├── template.xlsx
+│   └── Dec_2025.xlsx
+├── output/                  # Downloaded files (created automatically)
+│   └── ProjectName/
+│       ├── logs/
+│       └── FolderName/
+│           ├── Investigation/
+│           ├── Source/
+│           └── TestResult/
+├── src/                     # Source code
+│   ├── main.py             # CLI downloader script
+│   ├── gui.py              # GUI application
+│   └── __pycache__/
+├── test/                    # Test scripts
+│   └── test_reuse_profile.py
+└── dist/                    # Built executables (created by PyInstaller)
+    └── JiraDownloader
+```
+
+## Development
+
+### Running Tests
+
+```bash
+python test/test_reuse_profile.py
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+This project is for internal use. Please ensure you have proper authorization before using it to access JIRA and Gerrit systems.
+
+## Support
+
+For issues or questions:
+1. Check the Troubleshooting section above
+2. Review the output logs in `output/ProjectName/logs/`
+3. Ensure all prerequisites are installed
+4. Verify your `config.ini` is properly configured
+
+---
+
+**Version:** 3.0 with GUI  
+**Last Updated:** December 2025  
+**Python Version:** 3.7+  
+**Supported Platforms:** Linux, Windows, macOS
 
 You'll be prompted for:
 
