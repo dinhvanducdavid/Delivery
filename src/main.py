@@ -444,8 +444,7 @@ class JiraDownloader:
                 self.logger.error(f"Error downloading Gerrit {gerrit_id}: {e}")
                 continue
 
-    def download_jira_issue(self, jira_id: str, folder_name: str,
-                            name_fih: str, name_sharp: str) -> None:
+    def download_jira_issue(self, jira_id: str, folder_name: str) -> None:
         """Download JIRA issue document and associated Gerrit patches"""
         # Create directory structure
         base_dir = self.download_path / folder_name
@@ -498,8 +497,7 @@ class JiraDownloader:
             self.logger.error(f"Error downloading JIRA {jira_id}: {e}")
             time.sleep(3)
 
-    def process_excel_file(self, excel_path: str, gerrit_username: str, gerrit_password: str,
-                           name_fih: str, name_sharp: str) -> None:
+    def process_excel_file(self, excel_path: str, gerrit_username: str, gerrit_password: str) -> None:
         """Process Excel file and download all JIRA issues"""
         try:
             # Setup
@@ -534,7 +532,7 @@ class JiraDownloader:
                 print(f"\nProcessing: {jira_id} -> {folder_name}")
                 self.logger.info(f"Processing: {jira_id} -> {folder_name}")
 
-                self.download_jira_issue(jira_id, folder_name, name_fih, name_sharp)
+                self.download_jira_issue(jira_id, folder_name)
 
             workbook.close()
 
@@ -545,55 +543,62 @@ class JiraDownloader:
 
 def main():
     """Main entry point"""
+    # Get the directory of the current script (main.py)
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+
+    # Load configuration
+    config = configparser.ConfigParser()
+    config.read(project_root / 'config.ini')
+    settings = config['settings']
+
+    project_name = settings.get('project_name', '').strip()
+    excel_file_name = settings.get('excel_file', '').strip()
+    gerrit_username = settings.get('gerrit_username', 'lx24060097').strip()
+    gerrit_password = settings.get('gerrit_password', '').strip()
+    name_sharp = settings.get('sharp_name', 'lx24060097').strip()
+    name_fih = settings.get('fih_name', 'lx24060097').strip()
+
     print("=" * 60)
     print("JIRA Issue Downloader - Firefox Edition")
     print("=" * 60)
+    print(f"Project: {project_name}")
+    print(f"Excel File: {excel_file_name}")
+    print(f"Gerrit User: {gerrit_username}")
     print("\nℹ️  This script will use your default Firefox profile to reuse sessions.")
     print("Please close all Firefox windows before running.\n")
     input("Press Enter to continue...")
 
-    # Get user input
-    project_name = input('Enter project name: ').strip()
     if not project_name:
-        print("Project name is required!")
-        return
+        project_name = input('Enter project name: ').strip()
+        if not project_name:
+            print("Project name is required!")
+            return
 
-    # Get the directory of the current script (main.py)
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent
     input_dir = project_root / "input"
 
-    excel_file_name = input('Enter Excel file name (e.g., issues.xlsx): ').strip()
     if not excel_file_name:
-        print('Excel file name is required.')
-        return
+        excel_file_name = input('Enter Excel file name (e.g., issues.xlsx): ').strip()
+        if not excel_file_name:
+            print('Excel file name is required.')
+            return
 
     # If the user provides an absolute path, use it; otherwise, use the input directory
     excel_file_path = Path(excel_file_name)
     if not excel_file_path.is_absolute():
-        excel_file_path = input_dir / excel_file_path
+        excel_file_path = project_root / excel_file_path
 
     if not excel_file_path.exists():
         print(f'Error: Excel file not found at {excel_file_path}')
         return
 
-    gerrit_username = input('Enter Gerrit username (default: lx24060097): ').strip()
-    if not gerrit_username:
-        gerrit_username = "lx24060097"
-
-    # It's recommended to use a more secure method like environment variables or a config file for passwords
-    gerrit_password = input('Enter Gerrit password: ').strip()
     if not gerrit_password:
-        print("Gerrit password is required for login.")
-        return
+        # It's recommended to use a more secure method like environment variables or a config file for passwords
+        gerrit_password = input('Enter Gerrit password: ').strip()
+        if not gerrit_password:
+            print("Gerrit password is required for login.")
+            return
 
-    name_sharp = input('Enter Sharp name (default: lx24060097): ').strip()
-    if not name_sharp:
-        name_sharp = "lx24060097"
-
-    name_fih = input('Enter FIH name (default: lx24060097): ').strip()
-    if not name_fih:
-        name_fih = "lx24060097"
 
     # Build paths - create output folder at project root (same level as src)
     project_root = script_dir.parent  # Go up one level from src to project root
@@ -613,7 +618,7 @@ def main():
 
     try:
         downloader.process_excel_file(
-            str(excel_file_path), gerrit_username, gerrit_password, name_fih, name_sharp
+            str(excel_file_path), gerrit_username, gerrit_password
         )
         print("\n" + "=" * 60)
         print("Download process completed successfully!")

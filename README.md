@@ -57,13 +57,31 @@ The code has been reorganized into clean, maintainable classes:
 - Graceful fallbacks (e.g., using current date if ticket date not found)
 - Better error messages with logging
 
-## Installation
+### 6. **Configuration (`config.ini`)**
+- ✅ All user inputs (project name, Excel file, usernames) are now managed in `config.ini`.
+- ✅ No more repetitive command-line inputs.
+- ✅ Easy to switch between different projects by modifying the config file.
+- ✅ Passwords can be stored in the config file (though for security, consider environment variables for production use).
 
-### Prerequisites
+An example `config.ini` looks like this:
+
+```ini
+[settings]
+project_name = Dec_2025
+excel_file = input/Dec_2025.xlsx
+gerrit_username = your_gerrit_username
+gerrit_password = your_gerrit_password
+sharp_name = your_sharp_name
+fih_name = your_fih_name
+```
+
+## Setup and Usage
+
+### 1. Prerequisites
 - Python 3.7 or higher
 - Firefox browser installed
 
-### Install Dependencies
+### 2. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -71,7 +89,25 @@ pip install -r requirements.txt
 
 Or manually:
 ```bash
-pip install selenium openpyxl beautifulsoup4 webdriver-manager
+pip install selenium openpyxl beautifulsoup4 webdriver-manager configparser
+```
+
+### 3. Configure `config.ini`
+
+Before running, open the `config.ini` file and fill in your project details:
+
+```ini
+[settings]
+project_name = Dec_2025
+excel_file = input/Dec_2025.xlsx
+gerrit_username = your_gerrit_username
+gerrit_password = your_gerrit_password
+```
+
+### 4. Run the script
+
+```bash
+python src/main.py
 ```
 
 ### GeckoDriver Setup
