@@ -83,7 +83,7 @@ fih_name = your_fih_name
 - ✅ **Real-time output** display showing download progress
 - ✅ **Requirements status checker** with one-click package installation (development mode)
 - ✅ **Build executable** feature to create standalone applications
-- ✅ **Automatic DOC to PDF conversion** using LibreOffice
+- ✅ **Automatic HTML to PDF conversion** using browser's built-in print functionality
 - ✅ **Completion dialog** with option to open output folder
 - ✅ Cross-platform support (Linux, Windows, macOS)
 
@@ -92,8 +92,11 @@ fih_name = your_fih_name
 ### 1. Prerequisites
 - Python 3.7 or higher
 - Firefox browser installed
-- LibreOffice (optional, for DOC to PDF conversion)
 - `tkinter` (Linux users: `sudo apt-get install python3-tk`)
+- **Optional but recommended**: `wkhtmltopdf` for better PDF conversion
+  - Linux: `sudo apt-get install wkhtmltopdf`
+  - Windows: Download from [wkhtmltopdf.org](https://wkhtmltopdf.org/)
+  - macOS: `brew install wkhtmltopdf`
 
 ### 2. Install Dependencies
 
@@ -225,19 +228,63 @@ After building, you'll find the executable in the `dist/` folder:
 
 ## Features in Detail
 
-### DOC to PDF Conversion
+### Smart PDF Conversion with Image Support
 
-The application automatically converts downloaded `.doc` files to `.pdf` format before moving them to the Investigation folder.
+The application uses an intelligent multi-tier approach to convert JIRA issues to PDF with full image support:
 
-**Requirements:**
-- LibreOffice must be installed and accessible from the command line
-- On Linux: `sudo apt-get install libreoffice`
-- On Windows: Install LibreOffice from [libreoffice.org](https://www.libreoffice.org/)
+**Image Loading Strategy:**
+- Waits for the page to fully load
+- Scrolls through the page to trigger lazy-loaded images
+- Passes browser cookies to wkhtmltopdf for authenticated image access
+- Uses JavaScript delays to ensure all resources are loaded
 
-**Behavior:**
-- If LibreOffice is available: Converts `.doc` → `.pdf` and moves PDF to Investigation folder
-- If conversion fails: Falls back to moving the original `.doc` file
-- Progress is logged in real-time to the GUI output window
+**Conversion Methods (in order of preference):**
+
+1. **wkhtmltopdf** (Recommended - Best for images!)
+   - ✅ **Loads images from authenticated URLs**
+   - ✅ Uses browser cookies for authentication
+   - ✅ Loads external resources (CSS, JS, images)
+   - ✅ Excellent HTML/CSS support
+   - ✅ Produces high-quality PDFs with images intact
+   - Install: `sudo apt-get install wkhtmltopdf` (Linux) or download from [wkhtmltopdf.org](https://wkhtmltopdf.org/)
+   - **This is essential for preserving images in the PDF!**
+
+2. **Selenium 4's print_page()** (Built-in, limited image support)
+   - Native browser print functionality
+   - No external dependencies
+   - Works with Selenium 4.8.0+
+   - May not preserve all images
+   - Automatically attempted if wkhtmltopdf fails
+
+3. **WeasyPrint** (Python fallback, limited image support)
+   - Pure Python solution
+   - Install: `pip install weasyprint`
+   - Good for simple HTML layouts
+   - May have issues with external images
+
+4. **HTML Fallback**
+   - If all PDF conversions fail, saves the HTML file
+   - You can manually convert it later or open it in a browser
+
+**How it works:**
+1. Opens the JIRA issue in HTML format in the browser
+2. Scrolls through the page to trigger lazy-loaded images
+3. Waits for all images to load
+4. Passes the URL and browser cookies to wkhtmltopdf
+5. wkhtmltopdf loads the page with authentication and generates PDF
+6. Falls back to other methods if wkhtmltopdf is not available
+
+**Benefits:**
+- ✅ **Images are preserved** (when using wkhtmltopdf)
+- ✅ Multiple fallback options ensure conversion always works
+- ✅ Best quality output when wkhtmltopdf is available
+- ✅ Authenticated image loading (cookies passed to wkhtmltopdf)
+- ✅ No configuration needed - works out of the box
+- ✅ Graceful degradation to HTML if all methods fail
+- ✅ Cross-platform compatibility
+
+**Important:** For best results with images, install wkhtmltopdf!
+
 
 ### Smart File Handling
 
@@ -316,10 +363,6 @@ If you don't want to use the template, create an Excel file (`.xlsx`) with:
 - Check the output log for specific error messages
 - Verify that Firefox's download settings haven't been manually changed
 
-**PDF conversion not working**
-- Install LibreOffice: `sudo apt-get install libreoffice` (Linux) or download from libreoffice.org
-- Ensure the `libreoffice` command is in your system's PATH
-- If conversion fails, the original `.doc` file will be moved instead
 
 **GUI doesn't open (Linux)**
 - Install tkinter: `sudo apt-get install python3-tk`

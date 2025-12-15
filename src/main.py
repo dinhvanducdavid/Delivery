@@ -100,7 +100,7 @@ class JiraConfig:
 
     JIRA_URL = "https://sharp-smart-mobile-comm.atlassian.net/"
     JIRA_ISSUE_BASE_URL = "https://sharp-smart-mobile-comm.atlassian.net/browse/"
-    JIRA_DOC_BASE_URL = "https://sharp-smart-mobile-comm.atlassian.net/si/jira.issueviews:issue-word/"
+    JIRA_DOC_BASE_URL = "https://sharp-smart-mobile-comm.atlassian.net/si/jira.issueviews:issue-html/"
 
     GERRIT_LOGIN_URL = "https://secure.jp.sharp/android_review/gerrit/login/"
     GERRIT_ADDRESSES = {
@@ -162,58 +162,120 @@ class FileManager:
         time.sleep(1) # Brief pause before next action
 
     @staticmethod
-    def convert_and_move_doc_to_pdf(download_dir: str, investigation_dir: str, jira_id: str, log_callback) -> None:
-        """Convert .doc to .pdf and move to Investigation folder."""
-        download_path = Path(download_dir)
-        doc_file_path = None
-        for file_path in download_path.glob(f"{jira_id}.doc"):
-            if file_path.is_file():
-                doc_file_path = file_path
-                break
-
-        if not doc_file_path:
-            log_callback(f"Warning: {jira_id}.doc not found in {download_dir}")
-            return
-
+    def print_page_to_pdf(browser, investigation_dir: str, jira_id: str, log_callback) -> None:
+        """Use browser's print-to-PDF functionality to save the current page as PDF."""
         investigation_path = Path(investigation_dir)
         pdf_target_path = investigation_path / f"{jira_id}.pdf"
 
-        # Check if libreoffice is available
-        if shutil.which("libreoffice"):
-            log_callback(f"Converting {doc_file_path.name} to PDF...")
-            try:
-                subprocess.run(
+        log_callback(f"Printing page to PDF: {jira_id}.pdf")
+
+        try:
+            import base64
+
+            log_callback("Attempting to generate PDF using browser's print function...")
+
+            # Get the current URL for wkhtmltopdf to load directly
+            current_url = browser.current_url
+
+            # Try to use wkhtmltopdf with the URL directly (best for images)
+            if shutil.which("wkhtmltopdf"):
+                log_callback("Using wkhtmltopdf for PDF conversion (with images)...")
+
+                # Get cookies from the browser to pass to wkhtmltopdf for authentication
+                cookies = browser.get_cookies()
+                cookie_args = []
+                for cookie in cookies:
+                    cookie_args.extend(['--cookie', cookie['name'], cookie['value']])
+
+                result = subprocess.run(
                     [
-                        "libreoffice",
-                        "--headless",
-                        "--convert-to",
-                        "pdf",
-                        str(doc_file_path),
-                        "--outdir",
-                        str(download_path),
+                        "wkhtmltopdf",
+                        "--enable-local-file-access",
+                        "--load-error-handling", "ignore",
+                        "--load-media-error-handling", "ignore",
+                        "--enable-javascript",
+                        "--javascript-delay", "2000",
+                        "--no-stop-slow-scripts",
+                        "--enable-external-links",
+                        "--enable-internal-links",
+                        "--page-size", "A4",
+                        "--margin-top", "24mm",
+                        "--margin-bottom", "24mm",
+                        "--margin-left", "20mm",
+                        "--margin-right", "20mm",
+                        *cookie_args,
+                        current_url,
+                        str(pdf_target_path),
                     ],
-                    check=True,
-                    timeout=60,
+                    timeout=90,
+                    capture_output=True,
+                    text=True
                 )
 
-                converted_pdf_path = download_path / f"{jira_id}.pdf"
-
-                if converted_pdf_path.exists():
-                    shutil.move(str(converted_pdf_path), str(pdf_target_path))
-                    log_callback(f"Moved {converted_pdf_path.name} to {pdf_target_path}")
-                    doc_file_path.unlink() # remove original .doc file
+                if pdf_target_path.exists():
+                    log_callback(f"Successfully saved PDF to {pdf_target_path.name}")
+                    return
                 else:
-                    log_callback(f"Error: PDF conversion failed for {doc_file_path.name}. Moving the .doc file instead.")
-                    shutil.move(str(doc_file_path), investigation_path / doc_file_path.name)
+                    log_callback("wkhtmltopdf did not produce a PDF file.")
 
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                log_callback(f"Error during PDF conversion: {e}. Moving the .doc file instead.")
-                shutil.move(str(doc_file_path), investigation_path / doc_file_path.name)
-        else:
-            log_callback("Warning: 'libreoffice' is not installed. Moving the .doc file without conversion.")
-            shutil.move(str(doc_file_path), investigation_path / doc_file_path.name)
+            # Fallback: Save HTML and try other methods
+            log_callback("Falling back to HTML-based conversion...")
+            temp_html_path = investigation_path / f"{jira_id}_temp.html"
+            with open(temp_html_path, 'w', encoding='utf-8') as f:
+                f.write(browser.page_source)
 
-        time.sleep(2)
+            # Try using Selenium 4's print_page method
+            try:
+                from selenium.webdriver.common.print_page_options import PrintOptions
+
+                print_options = PrintOptions()
+                print_options.page_ranges = ['all']
+
+                log_callback("Trying Selenium print_page method...")
+                pdf_base64 = browser.print_page(print_options)
+                pdf_bytes = base64.b64decode(pdf_base64)
+
+                with open(pdf_target_path, 'wb') as f:
+                    f.write(pdf_bytes)
+
+                if pdf_target_path.exists():
+                    log_callback(f"Successfully saved PDF to {pdf_target_path.name}")
+                    if temp_html_path.exists():
+                        temp_html_path.unlink()  # Remove temp HTML
+                    return
+
+            except (ImportError, AttributeError, Exception) as e:
+                log_callback(f"print_page method not available: {e}")
+
+            # Try weasyprint as another fallback
+            try:
+                import weasyprint
+                log_callback("Using weasyprint for PDF conversion...")
+                weasyprint.HTML(filename=str(temp_html_path)).write_pdf(str(pdf_target_path))
+
+                if pdf_target_path.exists():
+                    log_callback(f"Successfully saved PDF to {pdf_target_path.name}")
+                    if temp_html_path.exists():
+                        temp_html_path.unlink()  # Remove temp HTML
+                    return
+
+            except ImportError:
+                log_callback("weasyprint is not installed.")
+            except Exception as e:
+                log_callback(f"Error with weasyprint: {e}")
+
+            # If all else fails, just keep the HTML file
+            log_callback("Could not convert to PDF. Saving HTML file instead.")
+            html_final_path = investigation_path / f"{jira_id}.html"
+            if temp_html_path.exists():
+                shutil.move(str(temp_html_path), str(html_final_path))
+                log_callback(f"Saved HTML to {html_final_path.name}")
+
+        except Exception as e:
+            log_callback(f"Error in print_page_to_pdf: {e}")
+            log_callback(f"Could not generate PDF for {jira_id}")
+
+        time.sleep(1)
 
 
 class GerritManager:
@@ -303,7 +365,9 @@ class JiraDownloader:
         options.set_preference("browser.download.dir", str(self.download_path))
         options.set_preference("browser.download.useDownloadDir", True)
         options.set_preference('browser.download.manager.showWhenStarting', False)
-        options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/zip, application/pdf, application/octet-stream")
+        options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/zip, application/pdf, application/octet-stream, text/html, application/xhtml+xml")
+        # Force download for HTML files instead of displaying them
+        options.set_preference("browser.helperApps.neverAsk.openFile", "text/html,application/xhtml+xml")
 
 
         try:
@@ -522,15 +586,32 @@ class JiraDownloader:
             self.browser.get(jira_url)
             time.sleep(2)
 
-            # Download JIRA document
-            doc_url = (f"{JiraConfig.JIRA_DOC_BASE_URL}{jira_id}/"
-                       f"{jira_id}.doc")
-            js = f"window.open('{doc_url}')"
-            self.browser.execute_script(js)
+            # Navigate to the JIRA HTML view and print to PDF
+            html_url = (f"{JiraConfig.JIRA_DOC_BASE_URL}{jira_id}/"
+                       f"{jira_id}.html")
+            self.logger.info(f"Opening HTML view: {html_url}")
+
+            # Open the HTML page
+            self.browser.get(html_url)
+            time.sleep(2)  # Initial wait for page load
+
+            # Scroll to the bottom to trigger lazy-loaded images
+            self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+
+            # Scroll back to top
+            self.browser.execute_script("window.scrollTo(0, 0);")
+            time.sleep(2)  # Additional wait for images to load
+
+            self.logger.info("Page fully loaded, generating PDF...")
+
+            # Print the page to PDF
+            FileManager.print_page_to_pdf(self.browser, str(doc_dir), jira_id, self.logger.info)
+
+            # Go back to the JIRA issue page for Gerrit link extraction
+            self.browser.get(jira_url)
             time.sleep(2)
 
-            # Convert and move downloaded .doc file to Investigation folder
-            FileManager.convert_and_move_doc_to_pdf(str(self.download_path), str(doc_dir), jira_id, self.logger.info)
 
             # Find and download Gerrit patches
             gerrit_list_p, gerrit_list_q, gerrit_list_ep2 = self.find_gerrit_links()
